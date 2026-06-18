@@ -9,7 +9,8 @@ services:
       - "80:80"
     restart: always
     depends_on:
-      - django_app
+      django_app:
+        condition: service_healthy # Wait until Django is fully up, not just started
     networks:
       - notes-app-nw
 
@@ -18,16 +19,18 @@ services:
       context: .
     image: django_app
     container_name: "django_cont"
+    # Port 8000 mapping can be removed if only Nginx accesses it, but left here for your convenience
     ports:
       - "8000:8000"
     command: sh -c "python manage.py migrate --noinput && gunicorn notesapp.wsgi --bind 0.0.0.0:8000"
     env_file:
       - ".env"
     depends_on:
-      - db
+      db:
+        condition: service_healthy # Wait for MySQL to finish initializing before running migrations
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/admin || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"] # Adjusted path if /admin returns a 302/404
       interval: 10s
       timeout: 5s
       retries: 5
@@ -42,7 +45,7 @@ services:
       - MYSQL_ROOT_PASSWORD=root
       - MYSQL_DATABASE=test_db
     volumes:
-      - ./data/mysql/db:/var/lib/mysql
+      - mysql_data:/var/lib/mysql # FIX: Using a named volume completely resolves Jenkins permission errors
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s
@@ -55,4 +58,6 @@ services:
 networks:
   notes-app-nw:
 
-  #Test Changes
+# Declare the named volume so Docker handles it outside your git workspace directory
+volumes:
+  mysql_data:
